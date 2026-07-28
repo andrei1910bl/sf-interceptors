@@ -1,17 +1,45 @@
+const DEFAULT_ERROR_MESSAGE = 'Something wrong';
+
 const STATUS_MESSAGES = {
     400: 'Bad Request — invalid or missing data',
     401: 'Unauthorized — invalid or expired session',
     403: 'Forbidden — insufficient permissions',
     404: 'Not Found — record or endpoint does not exist',
-    405: 'Method Not Allowed',
     409: 'Conflict — duplicate or conflicting record',
-    412: 'Precondition Failed',
-    413: 'Request Entity Too Large',
-    415: 'Unsupported Media Type',
     429: 'Too Many Requests — API limit exceeded',
     500: 'Internal Server Error — Salesforce server error',
     503: 'Service Unavailable — Salesforce is temporarily unavailable'
 };
+
+function resolveErrorMessage(status, primary) {
+    const code = primary?.errorCode;
+
+    switch (code) {
+        case 'REQUIRED_FIELD_MISSING':
+        case 'DUPLICATE_DETECTED':
+        case 'INVALID_SESSION_ID':
+        case 'NOT_FOUND':
+        case 'INSUFFICIENT_ACCESS_OR_READONLY':
+        case 'REQUEST_LIMIT_EXCEEDED':
+            return primary.message || STATUS_MESSAGES[status] || DEFAULT_ERROR_MESSAGE;
+    }
+
+    if (!code) {
+        switch (status) {
+            case 400:
+            case 401:
+            case 403:
+            case 404:
+            case 409:
+            case 429:
+            case 500:
+            case 503:
+                return STATUS_MESSAGES[status];
+        }
+    }
+
+    return DEFAULT_ERROR_MESSAGE;
+}
 
 export function parseSalesforceErrors(data) {
     if (Array.isArray(data)) {
@@ -70,7 +98,7 @@ export function buildSalesforceError(error) {
             source: 'salesforce',
             status,
             error: primary?.errorCode || `HTTP_${status}`,
-            message: primary?.message || STATUS_MESSAGES[status] || 'Salesforce request failed',
+            message: resolveErrorMessage(status, primary),
             errors: errors.length > 0 ? errors : undefined
         }
     };
@@ -118,7 +146,7 @@ export function handleHttpStatus(status, errors) {
             break;
         default:
             if (status >= 400) {
-                console.warn(`Unhandled Salesforce status: ${status}`);
+                console.warn(DEFAULT_ERROR_MESSAGE);
             }
     }
 
@@ -142,6 +170,8 @@ export function handleHttpStatus(status, errors) {
             case 'REQUEST_LIMIT_EXCEEDED':
                 console.warn('Salesforce request limit exceeded.');
                 break;
+            default:
+                console.warn(DEFAULT_ERROR_MESSAGE);
         }
     }
 }
